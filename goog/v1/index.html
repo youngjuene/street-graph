@@ -1,0 +1,1716 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Urban Navigation Graph Interface</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+          Oxygen, Ubuntu, Cantarell, sans-serif;
+        overflow: hidden;
+        background: #0a0a0a;
+        color: #e0e0e0;
+      }
+
+      #container {
+        display: flex;
+        height: 100vh;
+        width: 100vw;
+      }
+
+      /* Left Panel - POI Details */
+      #left-panel {
+        width: 300px;
+        background: #1a1a1a;
+        border-right: 1px solid #333;
+        overflow-y: auto;
+        padding: 20px;
+      }
+
+      /* Center - 3D Canvas */
+      #canvas-container {
+        flex: 1;
+        position: relative;
+        background: #0a0a0a;
+      }
+
+      #graph-canvas {
+        width: 100%;
+        height: 100%;
+      }
+
+      /* Right Panel - Histogram */
+      #right-panel {
+        width: 300px;
+        background: #1a1a1a;
+        border-left: 1px solid #333;
+        overflow-y: auto;
+        padding: 20px;
+      }
+
+      /* Bottom Panel - Itinerary */
+      #bottom-panel {
+        position: absolute;
+        bottom: 0;
+        left: 300px;
+        right: 300px;
+        height: 150px;
+        background: #1a1a1a;
+        border-top: 1px solid #333;
+        padding: 15px;
+        overflow-x: auto;
+        transform: translateY(100%);
+        transition: transform 0.3s ease;
+      }
+
+      #bottom-panel.visible {
+        transform: translateY(0);
+      }
+
+      /* UI Elements */
+      .panel-title {
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        color: #fff;
+      }
+
+      .poi-card {
+        background: #2a2a2a;
+        border-radius: 8px;
+        padding: 15px;
+        margin-bottom: 15px;
+      }
+
+      .poi-name {
+        font-size: 16px;
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #fff;
+      }
+
+      .poi-meta {
+        font-size: 13px;
+        color: #aaa;
+        margin: 4px 0;
+      }
+
+      .btn {
+        background: #4a9eff;
+        color: white;
+        border: none;
+        padding: 8px 16px;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        margin-top: 10px;
+      }
+
+      .btn:hover {
+        background: #3a8eef;
+      }
+
+      /* Stats Overlay */
+      #stats {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 12px;
+        color: #0f0;
+      }
+
+      #config-text {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(0, 0, 0, 0.7);
+        padding: 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        color: #aaa;
+      }
+
+      /* Filter Panel */
+      .filter-group {
+        margin-bottom: 20px;
+      }
+
+      .filter-label {
+        display: block;
+        margin-bottom: 8px;
+        font-size: 13px;
+        color: #ccc;
+      }
+
+      input[type="range"] {
+        width: 100%;
+      }
+
+      .filter-value {
+        float: right;
+        color: #4a9eff;
+      }
+
+      /* Histogram */
+      #histogram {
+        width: 100%;
+        height: 300px;
+        position: relative;
+      }
+
+      .bar {
+        position: absolute;
+        bottom: 0;
+        background: linear-gradient(to top, #4a9eff, #8ac6ff);
+        border-radius: 2px 2px 0 0;
+        transition: all 0.3s ease;
+      }
+
+      .bar:hover {
+        opacity: 0.8;
+      }
+
+      /* Help Overlay */
+      #help-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.9);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+      }
+
+      #help-overlay.visible {
+        display: flex;
+      }
+
+      .help-content {
+        background: #1a1a1a;
+        padding: 30px;
+        border-radius: 8px;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+      }
+
+      .shortcut {
+        display: flex;
+        justify-content: space-between;
+        padding: 8px 0;
+        border-bottom: 1px solid #333;
+      }
+
+      .key {
+        background: #2a2a2a;
+        padding: 2px 8px;
+        border-radius: 3px;
+        font-family: monospace;
+        color: #4a9eff;
+      }
+
+      /* City Input */
+      #city-input-panel {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #1a1a1a;
+        padding: 30px;
+        border-radius: 8px;
+        border: 1px solid #333;
+        z-index: 100;
+      }
+
+      #city-input {
+        width: 300px;
+        padding: 10px;
+        background: #2a2a2a;
+        border: 1px solid #444;
+        border-radius: 4px;
+        color: #fff;
+        font-size: 16px;
+        margin-bottom: 15px;
+      }
+
+      #city-input:focus {
+        outline: none;
+        border-color: #4a9eff;
+      }
+
+      .hidden {
+        display: none !important;
+      }
+
+      /* Loading Indicator */
+      .loader {
+        border: 3px solid #333;
+        border-top: 3px solid #4a9eff;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 20px auto;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      /* Itinerary Items */
+      .itinerary-list {
+        display: flex;
+        gap: 10px;
+        height: 100%;
+        align-items: center;
+      }
+
+      .itinerary-item {
+        background: #2a2a2a;
+        padding: 10px 15px;
+        border-radius: 6px;
+        white-space: nowrap;
+        cursor: move;
+      }
+
+      .itinerary-stats {
+        margin-top: 10px;
+        font-size: 12px;
+        color: #aaa;
+      }
+
+      /* Checkbox Group */
+      .checkbox-group {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 10px;
+      }
+
+      .checkbox-item {
+        display: flex;
+        align-items: center;
+        gap: 5px;
+        font-size: 12px;
+      }
+
+      input[type="checkbox"] {
+        cursor: pointer;
+      }
+    </style>
+  </head>
+  <body>
+    <!-- City Input Panel -->
+    <div id="city-input-panel">
+      <div class="panel-title">Enter City Name</div>
+      <input
+        type="text"
+        id="city-input"
+        placeholder="e.g., Paris, Tokyo, New York"
+      />
+      <button class="btn" onclick="loadCity()">Load POIs</button>
+      <div id="loading-indicator" class="hidden">
+        <div class="loader"></div>
+        <div style="text-align: center; margin-top: 10px">Loading POIs...</div>
+      </div>
+    </div>
+
+    <div id="container" class="hidden">
+      <!-- Left Panel: POI Details -->
+      <div id="left-panel">
+        <div class="panel-title">POI Details</div>
+        <div id="poi-details">
+          <div style="color: #666; text-align: center; padding: 20px">
+            Click a node to view details
+          </div>
+        </div>
+
+        <div style="margin-top: 30px">
+          <div class="panel-title">Filters</div>
+
+          <div class="filter-group">
+            <label class="filter-label">
+              Max Walking Distance
+              <span class="filter-value" id="distance-value">1.5 km</span>
+            </label>
+            <input
+              type="range"
+              id="max-distance"
+              min="500"
+              max="5000"
+              value="1500"
+              step="100"
+              oninput="updateFilter('distance', this.value)"
+            />
+          </div>
+
+          <div class="filter-group">
+            <label class="filter-label">
+              Min Rating
+              <span class="filter-value" id="rating-value">3.0★</span>
+            </label>
+            <input
+              type="range"
+              id="min-rating"
+              min="0"
+              max="5"
+              value="3"
+              step="0.5"
+              oninput="updateFilter('rating', this.value)"
+            />
+          </div>
+
+          <div class="filter-group">
+            <label class="filter-label">
+              Max Price Level
+              <span class="filter-value" id="price-value">$$$$</span>
+            </label>
+            <input
+              type="range"
+              id="max-price"
+              min="0"
+              max="4"
+              value="4"
+              step="1"
+              oninput="updateFilter('price', this.value)"
+            />
+          </div>
+
+          <div class="filter-group">
+            <label class="filter-label">POI Types</label>
+            <div class="checkbox-group" id="poi-types">
+              <label class="checkbox-item">
+                <input type="checkbox" value="restaurant" checked /> Restaurant
+              </label>
+              <label class="checkbox-item">
+                <input type="checkbox" value="cafe" checked /> Cafe
+              </label>
+              <label class="checkbox-item">
+                <input type="checkbox" value="museum" checked /> Museum
+              </label>
+              <label class="checkbox-item">
+                <input type="checkbox" value="park" checked /> Park
+              </label>
+              <label class="checkbox-item">
+                <input type="checkbox" value="tourist_attraction" checked />
+                Tourist
+              </label>
+            </div>
+          </div>
+
+          <button class="btn" onclick="applyFilters()" style="width: 100%">
+            Apply Filters
+          </button>
+        </div>
+      </div>
+
+      <!-- Center: 3D Canvas -->
+      <div id="canvas-container">
+        <canvas id="graph-canvas"></canvas>
+
+        <div id="stats">
+          FPS: <span id="fps">0</span><br />
+          Nodes: <span id="node-count">0</span><br />
+          Edges: <span id="edge-count">0</span>
+        </div>
+
+        <div id="config-text">
+          Viewing <span id="poi-count">0</span> POIs | Color:
+          <span id="color-scheme">Distance</span>
+        </div>
+      </div>
+
+      <!-- Right Panel: Histogram -->
+      <div id="right-panel">
+        <div class="panel-title">Distance Distribution</div>
+        <div id="histogram"></div>
+
+        <div style="margin-top: 30px">
+          <div class="panel-title">Graph Statistics</div>
+          <div id="graph-stats" style="font-size: 13px; color: #aaa">
+            <div style="margin: 8px 0">
+              Districts:
+              <span id="district-count" style="color: #4a9eff">0</span>
+            </div>
+            <div style="margin: 8px 0">
+              Avg Connections:
+              <span id="avg-degree" style="color: #4a9eff">0</span>
+            </div>
+            <div style="margin: 8px 0">
+              Max Distance:
+              <span id="max-dist" style="color: #4a9eff">0</span> min
+            </div>
+            <div style="margin: 8px 0">
+              Disconnected:
+              <span id="disconnected" style="color: #4a9eff">0</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Bottom Panel: Itinerary -->
+      <div id="bottom-panel">
+        <div class="panel-title">Itinerary Builder</div>
+        <div class="itinerary-list" id="itinerary-list">
+          <div style="color: #666">
+            Press Ctrl+Click on nodes to add to itinerary
+          </div>
+        </div>
+        <div class="itinerary-stats" id="itinerary-stats"></div>
+      </div>
+    </div>
+
+    <!-- Help Overlay -->
+    <div id="help-overlay">
+      <div class="help-content">
+        <div class="panel-title">Keyboard Shortcuts</div>
+        <div class="shortcut">
+          <span>Cycle color schemes</span>
+          <span class="key">C</span>
+        </div>
+        <div class="shortcut">
+          <span>Toggle solutions</span>
+          <span class="key">S</span>
+        </div>
+        <div class="shortcut">
+          <span>Toggle shortest path</span>
+          <span class="key">P</span>
+        </div>
+        <div class="shortcut">
+          <span>Toggle disconnected islands</span>
+          <span class="key">D</span>
+        </div>
+        <div class="shortcut">
+          <span>Next nearest POI</span>
+          <span class="key">N</span>
+        </div>
+        <div class="shortcut">
+          <span>Find POI</span>
+          <span class="key">F</span>
+        </div>
+        <div class="shortcut">
+          <span>Toggle itinerary panel</span>
+          <span class="key">I</span>
+        </div>
+        <div class="shortcut">
+          <span>Show/hide help</span>
+          <span class="key">H</span>
+        </div>
+        <div class="shortcut">
+          <span>Reset view</span>
+          <span class="key">R</span>
+        </div>
+        <div class="shortcut">
+          <span>Pause/resume simulation</span>
+          <span class="key">Space</span>
+        </div>
+        <button
+          class="btn"
+          onclick="toggleHelp()"
+          style="margin-top: 20px; width: 100%"
+        >
+          Close
+        </button>
+      </div>
+    </div>
+
+    <!-- Three.js -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+    <!-- API Configuration (load your API key from external file) -->
+    <script src="config.js"></script>
+
+    <script>
+      // Configuration
+      const CONFIG = {
+        GOOGLE_API_KEY: window.API_CONFIG?.GOOGLE_API_KEY || 'YOUR_API_KEY_HERE', // Loaded from config.js
+        MAX_WALKING_DISTANCE: 1500, // meters
+        MAX_WALKING_TIME: 20, // minutes
+        WALKING_SPEED: 1.4, // m/s (average human walking speed)
+        FORCE_ITERATIONS: 1000,
+        REPULSION_STRENGTH: 5000,
+        ATTRACTION_STRENGTH: 0.01,
+        GRAVITY_STRENGTH: 0.1,
+        COOLING_FACTOR: 0.95,
+      };
+
+      // Global State
+      const state = {
+        graph: null,
+        scene: null,
+        camera: null,
+        renderer: null,
+        controls: null,
+        nodes: [],
+        edges: [],
+        selectedNode: null,
+        hoveredNode: null,
+        colorScheme: "distance", // distance, type, price, neighborhood, difficulty
+        showSolutions: false,
+        showShortestPath: false,
+        showDisconnected: true,
+        simulationRunning: false,
+        itinerary: [],
+        filters: {
+          maxDistance: 1500,
+          minRating: 3.0,
+          maxPrice: 4,
+          types: ["restaurant", "cafe", "museum", "park", "tourist_attraction"],
+        },
+      };
+
+      // ============= CORE DATA STRUCTURES =============
+
+      class POI {
+        constructor(data) {
+          this.id = data.id || data.place_id || Math.random().toString(36);
+          this.name = data.name || data.displayName?.text || "Unknown";
+          this.types = data.types || [];
+          this.location = {
+            lat: data.location?.latitude || data.geometry?.location?.lat || 0,
+            lng: data.location?.longitude || data.geometry?.location?.lng || 0,
+          };
+          this.rating = data.rating || 0;
+          this.priceLevel = data.priceLevel || data.price_level || 0;
+          this.openingHours = data.openingHours || data.opening_hours || null;
+          this.businessStatus = data.businessStatus || "OPERATIONAL";
+          this.userRatingsTotal =
+            data.userRatingsTotal || data.user_ratings_total || 0;
+          this.photos = data.photos || [];
+          this.metadata = {
+            distanceFromStart: 0,
+            travelTimeFromStart: 0,
+            bfsDistance: Infinity,
+            clusterId: 0,
+            centrality: {
+              degree: 0,
+              betweenness: 0,
+              closeness: 0,
+            },
+          };
+          // 3D position for force-directed layout
+          this.position = {
+            x: Math.random() * 100 - 50,
+            y: Math.random() * 100 - 50,
+            z: Math.random() * 100 - 50,
+          };
+          this.velocity = { x: 0, y: 0, z: 0 };
+          this.force = { x: 0, y: 0, z: 0 };
+          this.mesh = null; // Three.js mesh object
+        }
+      }
+
+      class Edge {
+        constructor(source, target, data = {}) {
+          this.source = source; // POI id
+          this.target = target; // POI id
+          this.distance = data.distance || 0; // meters
+          this.duration = data.duration || 0; // seconds
+          this.mode = data.mode || "WALK";
+          this.polyline = data.polyline || "";
+          this.steps = data.steps || [];
+          this.line = null; // Three.js line object
+        }
+      }
+
+      class Graph {
+        constructor() {
+          this.nodes = new Map(); // id -> POI
+          this.edges = []; // Array of Edge objects
+          this.adjacencyList = new Map(); // id -> [connected POI ids]
+          this.adjacencyMatrix = []; // 2D array of distances
+          this.communities = new Map(); // clusterId -> [POI ids]
+          this.startNode = null;
+          this.solutionNodes = [];
+          this.disconnectedComponents = [];
+        }
+
+        addNode(poi) {
+          this.nodes.set(poi.id, poi);
+          this.adjacencyList.set(poi.id, []);
+        }
+
+        addEdge(edge) {
+          this.edges.push(edge);
+          this.adjacencyList.get(edge.source).push(edge.target);
+          this.adjacencyList.get(edge.target).push(edge.source);
+        }
+
+        getNode(id) {
+          return this.nodes.get(id);
+        }
+
+        getNeighbors(id) {
+          return this.adjacencyList.get(id) || [];
+        }
+
+        buildAdjacencyMatrix() {
+          const nodeArray = Array.from(this.nodes.values());
+          const n = nodeArray.length;
+          this.adjacencyMatrix = Array(n)
+            .fill(null)
+            .map(() => Array(n).fill(Infinity));
+
+          // Initialize diagonal to 0
+          for (let i = 0; i < n; i++) {
+            this.adjacencyMatrix[i][i] = 0;
+          }
+
+          // Fill with edge weights
+          this.edges.forEach((edge) => {
+            const sourceIdx = nodeArray.findIndex((n) => n.id === edge.source);
+            const targetIdx = nodeArray.findIndex((n) => n.id === edge.target);
+            if (sourceIdx !== -1 && targetIdx !== -1) {
+              this.adjacencyMatrix[sourceIdx][targetIdx] = edge.duration / 60; // convert to minutes
+              this.adjacencyMatrix[targetIdx][sourceIdx] = edge.duration / 60;
+            }
+          });
+        }
+      }
+
+      // ============= UTILITY FUNCTIONS =============
+
+      // Haversine distance formula (returns meters)
+      function haversineDistance(lat1, lng1, lat2, lng2) {
+        const R = 6371000; // Earth radius in meters
+        const φ1 = (lat1 * Math.PI) / 180;
+        const φ2 = (lat2 * Math.PI) / 180;
+        const Δφ = ((lat2 - lat1) * Math.PI) / 180;
+        const Δλ = ((lng2 - lng1) * Math.PI) / 180;
+
+        const a =
+          Math.sin(Δφ / 2) * Math.sin(Δφ / 2) +
+          Math.cos(φ1) * Math.cos(φ2) * Math.sin(Δλ / 2) * Math.sin(Δλ / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+        return R * c;
+      }
+
+      // BFS to calculate distances from start node
+      function calculateBFSDistances(graph, startNodeId) {
+        const distances = new Map();
+        const queue = [[startNodeId, 0]];
+        const visited = new Set();
+
+        while (queue.length > 0) {
+          const [nodeId, dist] = queue.shift();
+
+          if (visited.has(nodeId)) continue;
+          visited.add(nodeId);
+
+          distances.set(nodeId, dist);
+          const node = graph.getNode(nodeId);
+          if (node) node.metadata.bfsDistance = dist;
+
+          const neighbors = graph.getNeighbors(nodeId);
+          neighbors.forEach((neighborId) => {
+            if (!visited.has(neighborId)) {
+              queue.push([neighborId, dist + 1]);
+            }
+          });
+        }
+
+        return distances;
+      }
+
+      // Detect connected components
+      function findConnectedComponents(graph) {
+        const visited = new Set();
+        const components = [];
+
+        graph.nodes.forEach((node, nodeId) => {
+          if (!visited.has(nodeId)) {
+            const component = [];
+            const stack = [nodeId];
+
+            while (stack.length > 0) {
+              const current = stack.pop();
+              if (visited.has(current)) continue;
+
+              visited.add(current);
+              component.push(current);
+
+              const neighbors = graph.getNeighbors(current);
+              neighbors.forEach((neighbor) => {
+                if (!visited.has(neighbor)) {
+                  stack.push(neighbor);
+                }
+              });
+            }
+
+            components.push(component);
+          }
+        });
+
+        return components;
+      }
+
+      // ============= GOOGLE MAPS API INTEGRATION =============
+
+      async function geocodeCity(cityName) {
+        const url = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+          cityName
+        )}&key=${CONFIG.GOOGLE_API_KEY}`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (data.status === "OK" && data.results.length > 0) {
+          const location = data.results[0].geometry.location;
+          return { lat: location.lat, lng: location.lng };
+        }
+        throw new Error("City not found");
+      }
+
+      async function fetchNearbyPOIs(lat, lng, radius = 2000) {
+        // Using Places API (New)
+        const url = "https://places.googleapis.com/v1/places:searchNearby";
+
+        const requestBody = {
+          includedTypes: [
+            "restaurant",
+            "cafe",
+            "book_store",
+            "museum",
+            "park",
+            "tourist_attraction",
+          ],
+          maxResultCount: 20,
+          locationRestriction: {
+            circle: {
+              center: { latitude: lat, longitude: lng },
+              radius: radius,
+            },
+          },
+          rankPreference: "POPULARITY",
+        };
+
+        try {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "X-Goog-Api-Key": CONFIG.GOOGLE_API_KEY,
+              "X-Goog-FieldMask":
+                "places.displayName,places.id,places.types,places.location,places.rating,places.priceLevel,places.businessStatus,places.userRatingCount",
+            },
+            body: JSON.stringify(requestBody),
+          });
+
+          const data = await response.json();
+          return data.places || [];
+        } catch (error) {
+          console.error("Error fetching POIs:", error);
+          // Fallback to mock data for development
+          return generateMockPOIs(lat, lng, 50);
+        }
+      }
+
+      // Generate mock POIs for development/testing
+      function generateMockPOIs(centerLat, centerLng, count) {
+        const types = [
+          "restaurant",
+          "cafe",
+          "museum",
+          "park",
+          "tourist_attraction",
+        ];
+        const pois = [];
+
+        for (let i = 0; i < count; i++) {
+          // Random position within ~2km radius
+          const angle = Math.random() * 2 * Math.PI;
+          const distance = Math.random() * 0.02; // ~2km in degrees
+          const lat = centerLat + distance * Math.cos(angle);
+          const lng = centerLng + distance * Math.sin(angle);
+
+          pois.push({
+            id: `poi_${i}`,
+            displayName: { text: `POI ${i}` },
+            types: [types[Math.floor(Math.random() * types.length)]],
+            location: { latitude: lat, longitude: lng },
+            rating: 3 + Math.random() * 2,
+            priceLevel: Math.floor(Math.random() * 5),
+            businessStatus: "OPERATIONAL",
+            userRatingCount: Math.floor(Math.random() * 1000),
+          });
+        }
+
+        return pois;
+      }
+
+      // Build graph from POI data
+      function buildGraph(pois, centerLat, centerLng) {
+        const graph = new Graph();
+
+        // Add all POIs as nodes
+        pois.forEach((poiData) => {
+          const poi = new POI(poiData);
+
+          // Calculate distance from center
+          poi.metadata.distanceFromStart = haversineDistance(
+            centerLat,
+            centerLng,
+            poi.location.lat,
+            poi.location.lng
+          );
+          poi.metadata.travelTimeFromStart =
+            poi.metadata.distanceFromStart / CONFIG.WALKING_SPEED / 60; // minutes
+
+          graph.addNode(poi);
+        });
+
+        // Create edges between nearby POIs
+        const nodeArray = Array.from(graph.nodes.values());
+        for (let i = 0; i < nodeArray.length; i++) {
+          for (let j = i + 1; j < nodeArray.length; j++) {
+            const poi1 = nodeArray[i];
+            const poi2 = nodeArray[j];
+
+            const distance = haversineDistance(
+              poi1.location.lat,
+              poi1.location.lng,
+              poi2.location.lat,
+              poi2.location.lng
+            );
+
+            // Create edge if within walking distance threshold
+            if (distance <= CONFIG.MAX_WALKING_DISTANCE) {
+              const duration = distance / CONFIG.WALKING_SPEED; // seconds
+              const edge = new Edge(poi1.id, poi2.id, {
+                distance: distance,
+                duration: duration,
+                mode: "WALK",
+              });
+              graph.addEdge(edge);
+            }
+          }
+        }
+
+        // Build adjacency matrix
+        graph.buildAdjacencyMatrix();
+
+        // Set start node (closest to center)
+        let minDist = Infinity;
+        graph.nodes.forEach((node) => {
+          if (node.metadata.distanceFromStart < minDist) {
+            minDist = node.metadata.distanceFromStart;
+            graph.startNode = node.id;
+          }
+        });
+
+        // Calculate BFS distances from start
+        if (graph.startNode) {
+          calculateBFSDistances(graph, graph.startNode);
+        }
+
+        // Find disconnected components
+        graph.disconnectedComponents = findConnectedComponents(graph);
+
+        return graph;
+      }
+
+      // ============= MAIN LOAD FUNCTION =============
+
+      async function loadCity() {
+        const cityName = document.getElementById("city-input").value.trim();
+        if (!cityName) {
+          alert("Please enter a city name");
+          return;
+        }
+
+        // Show loading
+        document.getElementById("loading-indicator").classList.remove("hidden");
+
+        try {
+          // Geocode city
+          const coords = await geocodeCity(cityName);
+          console.log(`Geocoded ${cityName} to:`, coords);
+
+          // Fetch POIs
+          const pois = await fetchNearbyPOIs(coords.lat, coords.lng);
+          console.log(`Fetched ${pois.length} POIs`);
+
+          // Build graph
+          state.graph = buildGraph(pois, coords.lat, coords.lng);
+          console.log("Graph built:", state.graph);
+
+          // Hide input panel, show main container
+          document.getElementById("city-input-panel").classList.add("hidden");
+          document.getElementById("container").classList.remove("hidden");
+
+          // Initialize 3D visualization
+          init3DVisualization();
+        } catch (error) {
+          console.error("Error loading city:", error);
+          alert("Error loading city: " + error.message);
+        } finally {
+          document.getElementById("loading-indicator").classList.add("hidden");
+        }
+      }
+
+      // ============= 3D VISUALIZATION =============
+
+      function init3DVisualization() {
+        console.log("Initializing 3D visualization...");
+
+        const canvas = document.getElementById("graph-canvas");
+        const container = document.getElementById("canvas-container");
+
+        // Scene setup
+        state.scene = new THREE.Scene();
+        state.scene.background = new THREE.Color(0x0a0a0a);
+
+        // Camera setup
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+        state.camera = new THREE.PerspectiveCamera(
+          75,
+          width / height,
+          0.1,
+          2000
+        );
+        state.camera.position.set(0, 0, 200);
+
+        // Renderer setup
+        state.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+        state.renderer.setSize(width, height);
+        state.renderer.setPixelRatio(window.devicePixelRatio);
+
+        // Lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        state.scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0xffffff, 0.8);
+        pointLight.position.set(100, 100, 100);
+        state.scene.add(pointLight);
+
+        // Create node meshes
+        createNodeMeshes();
+
+        // Create edge lines
+        createEdgeLines();
+
+        // Start force-directed layout simulation
+        state.simulationRunning = true;
+        runForceSimulation();
+
+        // Start animation loop
+        animate();
+
+        // Update stats
+        updateStats();
+
+        // Handle window resize
+        window.addEventListener("resize", onWindowResize);
+
+        // Add mouse interaction
+        setupMouseInteraction();
+
+        console.log(
+          `Visualization created: ${state.graph.nodes.size} nodes, ${state.graph.edges.length} edges`
+        );
+      }
+
+      function createNodeMeshes() {
+        state.graph.nodes.forEach((node) => {
+          // Node size based on rating and popularity
+          const baseSize = 2;
+          const size =
+            (baseSize *
+              (1 + node.rating / 5) *
+              Math.log10(node.userRatingsTotal + 10)) /
+            2;
+
+          // Different geometries for different POI types
+          let geometry;
+          const primaryType = node.types[0] || "tourist_attraction";
+
+          if (primaryType.includes("restaurant")) {
+            geometry = new THREE.SphereGeometry(size, 16, 16);
+          } else if (primaryType.includes("cafe")) {
+            geometry = new THREE.SphereGeometry(size, 16, 16);
+          } else if (primaryType.includes("museum")) {
+            geometry = new THREE.BoxGeometry(
+              size * 1.5,
+              size * 1.5,
+              size * 1.5
+            );
+          } else if (primaryType.includes("park")) {
+            geometry = new THREE.OctahedronGeometry(size);
+          } else {
+            geometry = new THREE.ConeGeometry(size, size * 2, 8);
+          }
+
+          // Color based on current color scheme
+          const color = getNodeColor(node);
+          const material = new THREE.MeshPhongMaterial({
+            color: color,
+            emissive: color,
+            emissiveIntensity: 0.2,
+            shininess: 30,
+          });
+
+          const mesh = new THREE.Mesh(geometry, material);
+          mesh.position.set(node.position.x, node.position.y, node.position.z);
+          mesh.userData = { nodeId: node.id, isPOI: true };
+
+          state.scene.add(mesh);
+          node.mesh = mesh;
+        });
+      }
+
+      function createEdgeLines() {
+        state.graph.edges.forEach((edge) => {
+          const sourceNode = state.graph.getNode(edge.source);
+          const targetNode = state.graph.getNode(edge.target);
+
+          if (!sourceNode || !targetNode) return;
+
+          const geometry = new THREE.BufferGeometry();
+          const positions = new Float32Array([
+            sourceNode.position.x,
+            sourceNode.position.y,
+            sourceNode.position.z,
+            targetNode.position.x,
+            targetNode.position.y,
+            targetNode.position.z,
+          ]);
+          geometry.setAttribute(
+            "position",
+            new THREE.BufferAttribute(positions, 3)
+          );
+
+          // Edge thickness based on travel time (thicker = faster)
+          const lineWidth = 1;
+          const material = new THREE.LineBasicMaterial({
+            color: 0x444444,
+            opacity: 0.3,
+            transparent: true,
+            linewidth: lineWidth,
+          });
+
+          const line = new THREE.Line(geometry, material);
+          state.scene.add(line);
+          edge.line = line;
+        });
+      }
+
+      function getNodeColor(node) {
+        switch (state.colorScheme) {
+          case "distance":
+            return getDistanceColor(node.metadata.bfsDistance);
+
+          case "type":
+            return getTypeColor(node.types[0] || "tourist_attraction");
+
+          case "price":
+            return getPriceColor(node.priceLevel);
+
+          case "neighborhood":
+            return getClusterColor(node.metadata.clusterId);
+
+          case "difficulty":
+            return getDifficultyColor(node.metadata.centrality.degree);
+
+          default:
+            return 0x4a9eff;
+        }
+      }
+
+      function getDistanceColor(bfsDistance) {
+        // Purple → Red → Orange → Yellow
+        if (bfsDistance === 0) return 0x9b59b6; // Purple (start)
+        if (bfsDistance === 1) return 0xe74c3c; // Red
+        if (bfsDistance === 2) return 0xe67e22; // Orange
+        if (bfsDistance === 3) return 0xf39c12; // Yellow
+        if (bfsDistance >= 4) return 0xf1c40f; // Light yellow
+        return 0x666666; // Unreachable (grey)
+      }
+
+      function getTypeColor(type) {
+        const typeColors = {
+          restaurant: 0xe74c3c, // Red
+          cafe: 0xe67e22, // Orange
+          museum: 0x3498db, // Blue
+          park: 0x2ecc71, // Green
+          book_store: 0x9b59b6, // Purple
+          tourist_attraction: 0xf39c12, // Yellow
+        };
+
+        for (const [key, color] of Object.entries(typeColors)) {
+          if (type.includes(key)) return color;
+        }
+        return 0x95a5a6; // Grey default
+      }
+
+      function getPriceColor(priceLevel) {
+        // Green (cheap) → Yellow → Orange → Red (expensive)
+        const colors = [
+          0x2ecc71, // Free/cheap
+          0x27ae60, // $
+          0xf39c12, // $$
+          0xe67e22, // $$$
+          0xe74c3c, // $$$$
+        ];
+        return colors[Math.min(priceLevel, 4)];
+      }
+
+      function getClusterColor(clusterId) {
+        const colors = [
+          0x3498db, 0xe74c3c, 0x2ecc71, 0xf39c12, 0x9b59b6, 0x1abc9c, 0xe67e22,
+          0x34495e,
+        ];
+        return colors[clusterId % colors.length];
+      }
+
+      function getDifficultyColor(degree) {
+        // Green (easy/many connections) → Red (hard/few connections)
+        if (degree > 10) return 0x2ecc71; // Green
+        if (degree > 5) return 0xf39c12; // Yellow
+        if (degree > 2) return 0xe67e22; // Orange
+        return 0xe74c3c; // Red
+      }
+
+      // ============= FORCE-DIRECTED LAYOUT =============
+
+      function runForceSimulation() {
+        let temperature = 100;
+        let iteration = 0;
+
+        const simulate = () => {
+          if (
+            !state.simulationRunning ||
+            iteration >= CONFIG.FORCE_ITERATIONS
+          ) {
+            console.log("Force simulation complete");
+            return;
+          }
+
+          // Reset forces
+          state.graph.nodes.forEach((node) => {
+            node.force = { x: 0, y: 0, z: 0 };
+          });
+
+          // Calculate repulsion forces (all pairs)
+          const nodeArray = Array.from(state.graph.nodes.values());
+          for (let i = 0; i < nodeArray.length; i++) {
+            for (let j = i + 1; j < nodeArray.length; j++) {
+              const node1 = nodeArray[i];
+              const node2 = nodeArray[j];
+
+              const dx = node1.position.x - node2.position.x;
+              const dy = node1.position.y - node2.position.y;
+              const dz = node1.position.z - node2.position.z;
+              const distSq = dx * dx + dy * dy + dz * dz + 0.01; // Avoid division by zero
+              const dist = Math.sqrt(distSq);
+
+              const force = CONFIG.REPULSION_STRENGTH / distSq;
+              const fx = (dx / dist) * force;
+              const fy = (dy / dist) * force;
+              const fz = (dz / dist) * force;
+
+              node1.force.x += fx;
+              node1.force.y += fy;
+              node1.force.z += fz;
+
+              node2.force.x -= fx;
+              node2.force.y -= fy;
+              node2.force.z -= fz;
+            }
+          }
+
+          // Calculate attraction forces (edges)
+          state.graph.edges.forEach((edge) => {
+            const source = state.graph.getNode(edge.source);
+            const target = state.graph.getNode(edge.target);
+
+            if (!source || !target) return;
+
+            const dx = target.position.x - source.position.x;
+            const dy = target.position.y - source.position.y;
+            const dz = target.position.z - source.position.z;
+            const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+            const force = dist * CONFIG.ATTRACTION_STRENGTH;
+            const fx = (dx / dist) * force;
+            const fy = (dy / dist) * force;
+            const fz = (dz / dist) * force;
+
+            source.force.x += fx;
+            source.force.y += fy;
+            source.force.z += fz;
+
+            target.force.x -= fx;
+            target.force.y -= fy;
+            target.force.z -= fz;
+          });
+
+          // Calculate gravity (pull toward center)
+          state.graph.nodes.forEach((node) => {
+            const dist = Math.sqrt(
+              node.position.x ** 2 + node.position.y ** 2 + node.position.z ** 2
+            );
+            const force = dist * CONFIG.GRAVITY_STRENGTH;
+
+            if (dist > 0) {
+              node.force.x -= (node.position.x / dist) * force;
+              node.force.y -= (node.position.y / dist) * force;
+              node.force.z -= (node.position.z / dist) * force;
+            }
+          });
+
+          // Update positions with cooling
+          state.graph.nodes.forEach((node) => {
+            // Skip if this is the fixed start node
+            if (node.id === state.graph.startNode && iteration > 100) {
+              node.position = { x: 0, y: 0, z: 0 };
+              return;
+            }
+
+            const displacement = Math.sqrt(
+              node.force.x ** 2 + node.force.y ** 2 + node.force.z ** 2
+            );
+
+            if (displacement > 0) {
+              const limitedDisp = Math.min(displacement, temperature);
+              node.position.x += (node.force.x / displacement) * limitedDisp;
+              node.position.y += (node.force.y / displacement) * limitedDisp;
+              node.position.z += (node.force.z / displacement) * limitedDisp;
+            }
+
+            // Update mesh position
+            if (node.mesh) {
+              node.mesh.position.set(
+                node.position.x,
+                node.position.y,
+                node.position.z
+              );
+            }
+          });
+
+          // Update edge positions
+          state.graph.edges.forEach((edge) => {
+            const source = state.graph.getNode(edge.source);
+            const target = state.graph.getNode(edge.target);
+
+            if (edge.line && source && target) {
+              const positions = edge.line.geometry.attributes.position.array;
+              positions[0] = source.position.x;
+              positions[1] = source.position.y;
+              positions[2] = source.position.z;
+              positions[3] = target.position.x;
+              positions[4] = target.position.y;
+              positions[5] = target.position.z;
+              edge.line.geometry.attributes.position.needsUpdate = true;
+            }
+          });
+
+          // Cool down
+          temperature *= CONFIG.COOLING_FACTOR;
+          iteration++;
+
+          // Continue simulation
+          if (iteration % 10 === 0) {
+            console.log(
+              `Force simulation iteration ${iteration}/${CONFIG.FORCE_ITERATIONS}`
+            );
+          }
+
+          requestAnimationFrame(simulate);
+        };
+
+        simulate();
+      }
+
+      // ============= MOUSE INTERACTION =============
+
+      const raycaster = new THREE.Raycaster();
+      const mouse = new THREE.Vector2();
+
+      function setupMouseInteraction() {
+        const canvas = document.getElementById("graph-canvas");
+
+        // Click
+        canvas.addEventListener("click", (event) => {
+          updateMousePosition(event);
+          raycaster.setFromCamera(mouse, state.camera);
+          const intersects = raycaster.intersectObjects(
+            state.scene.children.filter((obj) => obj.userData.isPOI)
+          );
+
+          if (intersects.length > 0) {
+            const nodeId = intersects[0].object.userData.nodeId;
+            selectNode(nodeId);
+          }
+        });
+
+        // Hover
+        canvas.addEventListener("mousemove", (event) => {
+          updateMousePosition(event);
+          raycaster.setFromCamera(mouse, state.camera);
+          const intersects = raycaster.intersectObjects(
+            state.scene.children.filter((obj) => obj.userData.isPOI)
+          );
+
+          if (intersects.length > 0) {
+            const nodeId = intersects[0].object.userData.nodeId;
+            hoverNode(nodeId);
+            canvas.style.cursor = "pointer";
+          } else {
+            hoverNode(null);
+            canvas.style.cursor = "default";
+          }
+        });
+
+        // Orbit controls (simple version)
+        let isMouseDown = false;
+        let mouseX = 0;
+        let mouseY = 0;
+
+        canvas.addEventListener("mousedown", (event) => {
+          isMouseDown = true;
+          mouseX = event.clientX;
+          mouseY = event.clientY;
+        });
+
+        canvas.addEventListener("mouseup", () => {
+          isMouseDown = false;
+        });
+
+        canvas.addEventListener("mousemove", (event) => {
+          if (!isMouseDown) return;
+
+          const deltaX = event.clientX - mouseX;
+          const deltaY = event.clientY - mouseY;
+
+          state.camera.position.x += deltaX * 0.5;
+          state.camera.position.y -= deltaY * 0.5;
+
+          mouseX = event.clientX;
+          mouseY = event.clientY;
+        });
+
+        // Zoom with mouse wheel
+        canvas.addEventListener("wheel", (event) => {
+          event.preventDefault();
+          const zoomSpeed = 0.1;
+          const delta = event.deltaY > 0 ? 1 + zoomSpeed : 1 - zoomSpeed;
+
+          state.camera.position.z *= delta;
+          state.camera.position.z = Math.max(
+            50,
+            Math.min(state.camera.position.z, 500)
+          );
+        });
+      }
+
+      function updateMousePosition(event) {
+        const canvas = document.getElementById("graph-canvas");
+        const rect = canvas.getBoundingClientRect();
+        mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+        mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      }
+
+      function selectNode(nodeId) {
+        state.selectedNode = nodeId;
+        const node = state.graph.getNode(nodeId);
+
+        if (!node) return;
+
+        // Update POI details panel
+        const detailsHTML = `
+                <div class="poi-card">
+                    <div class="poi-name">${node.name}</div>
+                    <div class="poi-meta">Type: ${
+                      node.types[0] || "Unknown"
+                    }</div>
+                    <div class="poi-meta">Rating: ${node.rating.toFixed(1)}★ (${
+          node.userRatingsTotal
+        } reviews)</div>
+                    <div class="poi-meta">Price: ${"$".repeat(
+                      node.priceLevel || 1
+                    )}</div>
+                    <div class="poi-meta">Distance: ${(
+                      node.metadata.distanceFromStart / 1000
+                    ).toFixed(2)} km</div>
+                    <div class="poi-meta">Travel time: ${node.metadata.travelTimeFromStart.toFixed(
+                      0
+                    )} min</div>
+                    <div class="poi-meta">Graph distance: ${
+                      node.metadata.bfsDistance
+                    } hops</div>
+                    <button class="btn" onclick="addToItinerary('${nodeId}')">Add to Itinerary</button>
+                </div>
+            `;
+        document.getElementById("poi-details").innerHTML = detailsHTML;
+
+        // Highlight selected node
+        state.graph.nodes.forEach((n) => {
+          if (n.mesh) {
+            n.mesh.material.emissiveIntensity = n.id === nodeId ? 0.6 : 0.2;
+          }
+        });
+      }
+
+      function hoverNode(nodeId) {
+        state.hoveredNode = nodeId;
+        // Could add tooltip here
+      }
+
+      function addToItinerary(nodeId) {
+        if (!state.itinerary.includes(nodeId)) {
+          state.itinerary.push(nodeId);
+          updateItineraryDisplay();
+        }
+      }
+
+      function updateItineraryDisplay() {
+        const listHTML = state.itinerary
+          .map((nodeId) => {
+            const node = state.graph.getNode(nodeId);
+            return `<div class="itinerary-item">${node.name}</div>`;
+          })
+          .join("");
+
+        document.getElementById("itinerary-list").innerHTML =
+          listHTML ||
+          '<div style="color: #666;">Press Ctrl+Click on nodes to add to itinerary</div>';
+
+        // Calculate stats
+        if (state.itinerary.length > 1) {
+          let totalDistance = 0;
+          let totalTime = 0;
+
+          for (let i = 0; i < state.itinerary.length - 1; i++) {
+            const node1 = state.graph.getNode(state.itinerary[i]);
+            const node2 = state.graph.getNode(state.itinerary[i + 1]);
+
+            const dist = haversineDistance(
+              node1.location.lat,
+              node1.location.lng,
+              node2.location.lat,
+              node2.location.lng
+            );
+            totalDistance += dist;
+            totalTime += dist / CONFIG.WALKING_SPEED / 60;
+          }
+
+          document.getElementById("itinerary-stats").innerHTML = `
+                    Total: ${(totalDistance / 1000).toFixed(2)} km,
+                    ${totalTime.toFixed(0)} minutes walking
+                `;
+        }
+      }
+
+      // ============= ANIMATION LOOP =============
+
+      let fps = 0;
+      let frameCount = 0;
+      let lastTime = performance.now();
+
+      function animate() {
+        requestAnimationFrame(animate);
+
+        // Update FPS
+        frameCount++;
+        const currentTime = performance.now();
+        if (currentTime - lastTime >= 1000) {
+          fps = frameCount;
+          frameCount = 0;
+          lastTime = currentTime;
+          document.getElementById("fps").textContent = fps;
+        }
+
+        state.renderer.render(state.scene, state.camera);
+      }
+
+      function updateStats() {
+        document.getElementById("node-count").textContent =
+          state.graph.nodes.size;
+        document.getElementById("edge-count").textContent =
+          state.graph.edges.length;
+        document.getElementById("poi-count").textContent =
+          state.graph.nodes.size;
+
+        // Update histogram
+        updateHistogram();
+
+        // Update graph stats
+        const components = state.graph.disconnectedComponents;
+        document.getElementById("district-count").textContent =
+          components.length;
+        document.getElementById("disconnected").textContent = components.filter(
+          (c) => c.length < 5
+        ).length;
+
+        const avgDegree =
+          (state.graph.edges.length * 2) / state.graph.nodes.size;
+        document.getElementById("avg-degree").textContent =
+          avgDegree.toFixed(1);
+
+        let maxDist = 0;
+        state.graph.nodes.forEach((node) => {
+          if (node.metadata.travelTimeFromStart > maxDist) {
+            maxDist = node.metadata.travelTimeFromStart;
+          }
+        });
+        document.getElementById("max-dist").textContent = maxDist.toFixed(0);
+      }
+
+      function updateHistogram() {
+        const bins = [
+          { label: "0-5", min: 0, max: 5, count: 0 },
+          { label: "5-10", min: 5, max: 10, count: 0 },
+          { label: "10-15", min: 10, max: 15, count: 0 },
+          { label: "15-20", min: 15, max: 20, count: 0 },
+          { label: "20-30", min: 20, max: 30, count: 0 },
+          { label: "30+", min: 30, max: Infinity, count: 0 },
+        ];
+
+        state.graph.nodes.forEach((node) => {
+          const time = node.metadata.travelTimeFromStart;
+          const bin = bins.find((b) => time >= b.min && time < b.max);
+          if (bin) bin.count++;
+        });
+
+        const maxCount = Math.max(...bins.map((b) => b.count), 1);
+        const histogram = document.getElementById("histogram");
+        const barWidth = 100 / bins.length;
+
+        histogram.innerHTML = bins
+          .map((bin, i) => {
+            const height = (bin.count / maxCount) * 100;
+            return `
+                    <div class="bar" style="
+                        left: ${i * barWidth}%;
+                        width: ${barWidth - 2}%;
+                        height: ${height}%;
+                    " title="${bin.label} min: ${bin.count} POIs"></div>
+                `;
+          })
+          .join("");
+      }
+
+      function onWindowResize() {
+        const container = document.getElementById("canvas-container");
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        state.camera.aspect = width / height;
+        state.camera.updateProjectionMatrix();
+
+        state.renderer.setSize(width, height);
+      }
+
+      // Filter and UI functions (placeholders)
+      function updateFilter(type, value) {
+        const formatters = {
+          distance: (v) => `${(v / 1000).toFixed(1)} km`,
+          rating: (v) => `${parseFloat(v).toFixed(1)}★`,
+          price: (v) => "$".repeat(parseInt(v) + 1),
+        };
+
+        document.getElementById(`${type}-value`).textContent =
+          formatters[type](value);
+        state.filters.maxDistance =
+          type === "distance" ? parseInt(value) : state.filters.maxDistance;
+        state.filters.minRating =
+          type === "rating" ? parseFloat(value) : state.filters.minRating;
+        state.filters.maxPrice =
+          type === "price" ? parseInt(value) : state.filters.maxPrice;
+      }
+
+      function applyFilters() {
+        console.log("Applying filters:", state.filters);
+        // Will rebuild graph with filters in next phase
+      }
+
+      function toggleHelp() {
+        document.getElementById("help-overlay").classList.toggle("visible");
+      }
+
+      // ============= KEYBOARD SHORTCUTS =============
+
+      function cycleColorScheme() {
+        const schemes = [
+          "distance",
+          "type",
+          "price",
+          "neighborhood",
+          "difficulty",
+        ];
+        const currentIndex = schemes.indexOf(state.colorScheme);
+        state.colorScheme = schemes[(currentIndex + 1) % schemes.length];
+
+        // Update all node colors
+        state.graph.nodes.forEach((node) => {
+          if (node.mesh) {
+            const color = getNodeColor(node);
+            node.mesh.material.color.setHex(color);
+            node.mesh.material.emissive.setHex(color);
+          }
+        });
+
+        document.getElementById("color-scheme").textContent =
+          state.colorScheme.charAt(0).toUpperCase() +
+          state.colorScheme.slice(1);
+        console.log("Color scheme changed to:", state.colorScheme);
+      }
+
+      function resetCamera() {
+        state.camera.position.set(0, 0, 200);
+        console.log("Camera reset");
+      }
+
+      function toggleSimulation() {
+        state.simulationRunning = !state.simulationRunning;
+        if (state.simulationRunning) {
+          runForceSimulation();
+          console.log("Simulation resumed");
+        } else {
+          console.log("Simulation paused");
+        }
+      }
+
+      // Keyboard shortcuts
+      document.addEventListener("keydown", (e) => {
+        if (e.target.tagName === "INPUT") return;
+
+        const key = e.key.toLowerCase();
+
+        if (key === "h") toggleHelp();
+        if (key === "i")
+          document.getElementById("bottom-panel").classList.toggle("visible");
+        if (key === "c") cycleColorScheme();
+        if (key === "r") resetCamera();
+        if (key === " ") {
+          e.preventDefault();
+          toggleSimulation();
+        }
+
+        // Note: More shortcuts (s, p, d, n, f) can be implemented in later phases
+      });
+
+      console.log("Urban Navigation Graph Interface loaded");
+    </script>
+  </body>
+</html>

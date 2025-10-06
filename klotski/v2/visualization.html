@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Treemap and Network Visualization</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background-color: #0a0e27;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+            padding: 20px;
+            gap: 20px;
+        }
+
+        .treemap-container {
+            width: 30%;
+            height: 100%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .treemap {
+            width: 90%;
+            height: 60%;
+            border: 4px solid #ffffff;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: repeat(4, 1fr);
+            gap: 8px;
+            background-color: #1a1e3a;
+        }
+
+        .tile {
+            border-radius: 2px;
+        }
+
+        .tile1 { grid-column: 1 / 3; grid-row: 1; background-color: #7b5fc7; }
+        .tile2 { grid-column: 3 / 5; grid-row: 1; background-color: #ff7b7b; }
+        .tile3 { grid-column: 1; grid-row: 2 / 4; background-color: #9fdc5c; }
+        .tile4 { grid-column: 2 / 4; grid-row: 2 / 4; background-color: #ff8c5a; }
+        .tile5 { grid-column: 4; grid-row: 2; background-color: #7dd87d; }
+        .tile6 { grid-column: 4; grid-row: 3; background-color: #5eb9c9; }
+        .tile7 { grid-column: 1 / 2; grid-row: 4; background-color: #e75a9c; }
+        .tile8 { grid-column: 2 / 4; grid-row: 4; background-color: #4a7dff; }
+
+        .network-container {
+            width: 70%;
+            height: 100%;
+            position: relative;
+        }
+
+        canvas {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="treemap-container">
+            <div class="treemap">
+                <div class="tile tile1"></div>
+                <div class="tile tile2"></div>
+                <div class="tile tile3"></div>
+                <div class="tile tile4"></div>
+                <div class="tile tile5"></div>
+                <div class="tile tile6"></div>
+                <div class="tile tile7"></div>
+                <div class="tile tile8"></div>
+            </div>
+        </div>
+        <div class="network-container">
+            <canvas id="networkCanvas"></canvas>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('networkCanvas');
+        const ctx = canvas.getContext('2d');
+
+        // Set canvas size
+        canvas.width = canvas.offsetWidth;
+        canvas.height = canvas.offsetHeight;
+
+        // Define nodes with positions and colors
+        const nodes = [
+            { x: 0.4, y: 0.3, size: 40, colors: ['#ff6b9d', '#ffa07a', '#87ceeb', '#98fb98', '#dda0dd'] },
+            { x: 0.55, y: 0.5, size: 35, colors: ['#4169e1', '#87ceeb', '#ffd700', '#ff69b4'] },
+            { x: 0.75, y: 0.25, size: 30, colors: ['#ff1493', '#ff69b4', '#ba55d3'] },
+            { x: 0.95, y: 0.6, size: 45, colors: ['#7fffd4', '#48d1cc', '#00ced1', '#5f9ea0'] },
+            { x: 0.92, y: 0.85, size: 38, colors: ['#98fb98', '#90ee90', '#00fa9a', '#3cb371'] },
+            { x: 0.38, y: 0.75, size: 32, colors: ['#4682b4', '#5f9ea0', '#87ceeb'] },
+            { x: 0.48, y: 0.88, size: 28, colors: ['#2e8b57', '#3cb371', '#66cdaa'] },
+        ];
+
+        // Define edges (connections between nodes)
+        const edges = [
+            [0, 1], [0, 2], [1, 2], [1, 3], [2, 3],
+            [3, 4], [1, 5], [5, 6], [0, 5]
+        ];
+
+        // Draw a multi-colored node
+        function drawNode(node) {
+            const x = node.x * canvas.width;
+            const y = node.y * canvas.height;
+
+            // Draw colored segments
+            const segmentAngle = (Math.PI * 2) / node.colors.length;
+            node.colors.forEach((color, i) => {
+                ctx.beginPath();
+                ctx.arc(x, y, node.size, segmentAngle * i, segmentAngle * (i + 1));
+                ctx.lineTo(x, y);
+                ctx.fillStyle = color;
+                ctx.fill();
+            });
+
+            // Add subtle glow
+            ctx.shadowBlur = 15;
+            ctx.shadowColor = 'rgba(255, 255, 255, 0.3)';
+
+            // Draw white border
+            ctx.beginPath();
+            ctx.arc(x, y, node.size, 0, Math.PI * 2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            ctx.shadowBlur = 0;
+        }
+
+        // Draw edge between two nodes
+        function drawEdge(node1, node2) {
+            const x1 = node1.x * canvas.width;
+            const y1 = node1.y * canvas.height;
+            const x2 = node2.x * canvas.width;
+            const y2 = node2.y * canvas.height;
+
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+            ctx.lineWidth = 1.5;
+            ctx.setLineDash([5, 5]);
+            ctx.stroke();
+            ctx.setLineDash([]);
+
+            // Draw dots along the edge
+            const distance = Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+            const dotCount = Math.floor(distance / 20);
+
+            for (let i = 1; i < dotCount; i++) {
+                const t = i / dotCount;
+                const x = x1 + (x2 - x1) * t;
+                const y = y1 + (y2 - y1) * t;
+
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.fill();
+            }
+        }
+
+        // Animation
+        let time = 0;
+        function animate() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw edges first (behind nodes)
+            edges.forEach(([i, j]) => {
+                drawEdge(nodes[i], nodes[j]);
+            });
+
+            // Draw nodes
+            nodes.forEach((node, i) => {
+                // Add subtle floating animation
+                const animatedNode = {
+                    ...node,
+                    x: node.x + Math.sin(time * 0.001 + i) * 0.01,
+                    y: node.y + Math.cos(time * 0.001 + i * 0.5) * 0.01
+                };
+                drawNode(animatedNode);
+            });
+
+            time++;
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        });
+    </script>
+</body>
+</html>
