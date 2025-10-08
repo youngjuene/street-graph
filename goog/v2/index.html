@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Urban Navigation Graph</title>
+    <style>
+      #map {
+        height: 100%;
+        width: calc(100% - 350px);
+        float: right;
+      }
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        font-family: sans-serif;
+      }
+      #sidebar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 350px;
+        height: 100%;
+        background: #f8f9fa;
+        padding: 15px;
+        z-index: 1;
+        overflow-y: auto;
+        border-right: 1px solid #ddd;
+      }
+      #poi-list {
+        list-style-type: none;
+        padding: 0;
+        margin: 0;
+      }
+      #poi-list li {
+        padding: 10px;
+        cursor: pointer;
+        border-bottom: 1px solid #eee;
+      }
+      #poi-list li:hover {
+        background-color: #e9ecef;
+      }
+      #poi-info {
+        padding-top: 15px;
+      }
+      #loading-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(255, 255, 255, 0.8);
+        z-index: 2;
+        display: none;
+        justify-content: center;
+        align-items: center;
+      }
+      #filter-container {
+        margin-top: 15px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="sidebar">
+      <h2>Urban Navigation</h2>
+      <form id="location-form">
+        <input type="text" id="location-input" placeholder="Enter a location" style="width: 200px;">
+        <button type="submit">Search</button>
+      </form>
+      <div id="filter-container">
+        <strong>Filter by Type:</strong><br>
+        <input type="checkbox" id="tourist_attraction" name="poi_type" value="tourist_attraction" checked>
+        <label for="tourist_attraction">Tourist Attractions</label><br>
+        <input type="checkbox" id="restaurant" name="poi_type" value="restaurant">
+        <label for="restaurant">Restaurants</label><br>
+        <input type="checkbox" id="museum" name="poi_type" value="museum">
+        <label for="museum">Museums</label><br>
+        <input type="checkbox" id="park" name="poi_type" value="park">
+        <label for="park">Parks</label><br>
+      </div>
+          <div id="itinerary-container">
+            <h3>Itinerary</h3>
+            <ul id="itinerary-list"></ul>
+            <div id="itinerary-summary"></div>
+            <button id="clear-itinerary">Clear Itinerary</button>
+          </div>
+          <ul id="poi-list"></ul>
+          <div id="poi-info"></div>
+        </div>
+        <div id="map"></div>
+        <div id="loading-overlay">
+          <p>Loading...</p>
+        </div>
+      
+        <script>
+          let map;
+          let markers = [];
+          let polylines = [];
+          let infoWindow;
+          let itinerary = [];
+      
+          function initMap() {
+            map = new google.maps.Map(document.getElementById('map'), {
+              center: {lat: 48.8566, lng: 2.3522}, // Paris
+              zoom: 14
+            });
+            infoWindow = new google.maps.InfoWindow();
+      
+            const locationForm = document.getElementById('location-form');
+            locationForm.addEventListener('submit', (e) => {
+              e.preventDefault();
+              const location = document.getElementById('location-input').value;
+              geocodeLocation(location);
+            });
+            
+            const filterCheckboxes = document.querySelectorAll('input[name="poi_type"]');
+            filterCheckboxes.forEach(checkbox => {
+              checkbox.addEventListener('change', () => fetchPois(map.getCenter()));
+            });
+            
+            const clearItineraryButton = document.getElementById('clear-itinerary');
+            clearItineraryButton.addEventListener('click', clearItinerary);
+      
+            fetchPois(map.getCenter());
+          }
+      
+          function geocodeLocation(location) {
+            const geocoder = new google.maps.Geocoder();
+            geocoder.geocode({ 'address': location }, (results, status) => {
+              if (status === 'OK') {
+                map.setCenter(results[0].geometry.location);
+                fetchPois(map.getCenter());
+              } else {
+                alert('Geocode was not successful for the following reason: ' + status);
+              }
+            });
+          }
+      
+          function fetchPois(center) {
+            showLoading(true);
+            const placesService = new google.maps.places.PlacesService(map);
+            const selectedTypes = Array.from(document.querySelectorAll('input[name="poi_type"]:checked')).map(cb => cb.value);
+            
+            if(selectedTypes.length === 0){
+              clearMap();
+              showLoading(false);
+              return;
+            }
+      
+            const request = {
+              location: center,
+              radius: '2000',
+              types: selectedTypes
+            };
+      
+            placesService.nearbySearch(request, (results, status) => {
+              if (status === google.maps.places.PlacesServiceStatus.OK) {
+                clearMap();
+                const poiList = document.getElementById('poi-list');
+                poiList.innerHTML = '';
+      
+                for (let i = 0; i < results.length; i++) {
+                  createMarker(results[i]);
+                  const li = document.createElement('li');
+                  li.textContent = results[i].name;
+                  li.onclick = () => {
+                    showPoiInfo(results[i]);
+                  };
+                  poiList.appendChild(li);
+                }
+                
+                calculateRoutes(results);
+              }
+              showLoading(false);
+            });
+          }
+          
+          function showPoiInfo(place) {
+              const placesService = new google.maps.places.PlacesService(map);
+              placesService.getDetails({
+                  placeId: place.place_id
+              }, (result, status) => {
+                  if (status === google.maps.places.PlacesServiceStatus.OK) {
+                      const poiInfo = document.getElementById('poi-info');
+                      poiInfo.innerHTML = `
+                          <h3>${result.name}</h3>
+                          <p><strong>Rating:</strong> ${result.rating} ★</p>
+                          <p><strong>Address:</strong> ${result.formatted_address}</p>
+                          <p><strong>Status:</strong> ${result.business_status}</p>
+                          <p>${result.opening_hours ? '<strong>Hours:</strong><br>' + result.opening_hours.weekday_text.join('<br>') : ''}</p>
+                          <button onclick='addToItinerary(${JSON.stringify(result)})'>Add to Itinerary</button>
+                      `;
+                      map.setCenter(result.geometry.location);
+                      infoWindow.setContent(result.name);
+                      const marker = markers.find(m => m.title === result.name);
+                      if(marker) infoWindow.open(map, marker);
+                  }
+              });
+          }
+          
+          function addToItinerary(poi) {
+              itinerary.push(poi);
+              updateItinerary();
+          }
+          
+          function removeFromItinerary(index) {
+              itinerary.splice(index, 1);
+              updateItinerary();
+          }
+          
+          function clearItinerary(){
+              itinerary = [];
+              updateItinerary();
+          }
+          
+          function updateItinerary() {
+              const itineraryList = document.getElementById('itinerary-list');
+              itineraryList.innerHTML = '';
+              let totalDistance = 0;
+              let totalDuration = 0;
+      
+              for (let i = 0; i < itinerary.length; i++) {
+                  const li = document.createElement('li');
+                  li.textContent = itinerary[i].name;
+                  const removeButton = document.createElement('button');
+                  removeButton.textContent = 'Remove';
+                  removeButton.onclick = () => removeFromItinerary(i);
+                  li.appendChild(removeButton);
+                  itineraryList.appendChild(li);
+              }
+              
+              if(itinerary.length > 1){
+                  const directionsService = new google.maps.DirectionsService();
+                  for(let i = 0; i < itinerary.length -1; i++){
+                       const request = {
+                          origin: itinerary[i].geometry.location,
+                          destination: itinerary[i+1].geometry.location,
+                          travelMode: 'WALKING'
+                      };
+                      directionsService.route(request, (result, status) => {
+                          if (status == 'OK') {
+                              totalDistance += result.routes[0].legs[0].distance.value;
+                              totalDuration += result.routes[0].legs[0].duration.value;
+                          }
+                          
+                          if(i === itinerary.length - 2){
+                              document.getElementById('itinerary-summary').innerHTML = `
+                                  <p><strong>Total Distance:</strong> ${(totalDistance / 1000).toFixed(2)} km</p>
+                                  <p><strong>Total Duration:</strong> ${(totalDuration / 60).toFixed(0)} minutes</p>
+                              `;
+                          }
+                      });
+                  }
+              } else {
+                  document.getElementById('itinerary-summary').innerHTML = '';
+              }
+          }
+      
+          function createMarker(place) {
+            const marker = new google.maps.Marker({
+              map: map,
+              position: place.geometry.location,
+              title: place.name
+            });
+            marker.addListener('click', () => {
+              showPoiInfo(place);
+            });
+            markers.push(marker);
+          }
+          
+          function calculateRoutes(pois) {
+              const directionsService = new google.maps.DirectionsService();
+      
+              for (let i = 0; i < pois.length; i++) {
+                  for (let j = i + 1; j < pois.length; j++) {
+                      const request = {
+                          origin: pois[i].geometry.location,
+                          destination: pois[j].geometry.location,
+                          travelMode: 'WALKING'
+                      };
+      
+                      directionsService.route(request, (result, status) => {
+                          if (status == 'OK') {
+                              if (result.routes[0].legs[0].duration.value <= 1200) { // 20 minutes
+                                  drawPolyline(result);
+                              }
+                          }
+                      });
+                  }
+              }
+          }
+      
+          function drawPolyline(result) {
+              const polyline = new google.maps.Polyline({
+                  path: result.routes[0].overview_path,
+                  geodesic: true,
+                  strokeColor: '#FF0000',
+                  strokeOpacity: 0.5,
+                  strokeWeight: 2
+              });
+              polyline.setMap(map);
+              polylines.push(polyline);
+          }
+      
+          function clearMap() {
+            for (let i = 0; i < markers.length; i++) {
+              markers[i].setMap(null);
+            }
+            markers = [];
+            for (let i = 0; i < polylines.length; i++) {
+              polylines[i].setMap(null);
+            }
+            polylines = [];
+            document.getElementById('poi-list').innerHTML = '';
+            document.getElementById('poi-info').innerHTML = '';
+          }
+      
+          function showLoading(show) {
+              document.getElementById('loading-overlay').style.display = show ? 'flex' : 'none';
+          }
+        </script>  <script src="config.js"></script>
+  <script>
+    // Dynamically load the Google Maps API script
+    const script = document.createElement('script');
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places&callback=initMap`;
+    script.async = true;
+    script.defer = true;
+    document.head.appendChild(script);
+  </script>
+</body>
+</html>
